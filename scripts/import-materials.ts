@@ -1,7 +1,7 @@
 /**
  * Import community material repositories into Convex, following convex/standard.ts.
  *
- *   npx tsx scripts/import-materials.ts <checkouts-dir> [--dry-run]
+ *   npx tsx scripts/import-materials.ts <checkouts-dir> [--dry-run] [--only <dir>]
  *
  * <checkouts-dir> must contain shallow clones named as in SOURCES below.
  * Re-running is safe: identical files are skipped, and stored bytes are reused by hash.
@@ -64,11 +64,11 @@ function walk(dir: string): string[] {
   })
 }
 
-function plan(root: string) {
+function plan(root: string, only?: string) {
   const planned: Planned[] = []
   const unmatched = new Map<string, number>()
   const skipped = { junk: 0, tooBig: 0, outside: 0 }
-  for (const source of SOURCES) {
+  for (const source of SOURCES.filter((s) => !only || s.dir === only)) {
     const base = join(root, source.dir)
     const commit = execSync("git rev-parse HEAD", { cwd: base }).toString().trim()
     for (const abs of walk(base)) {
@@ -99,9 +99,12 @@ async function pool<T>(items: T[], n: number, fn: (item: T, i: number) => Promis
 }
 
 async function main() {
-  const [root, flag] = process.argv.slice(2)
-  if (!root) throw new Error("usage: import-materials.ts <checkouts-dir> [--dry-run]")
-  const { planned, unmatched, skipped } = plan(root)
+  const args = process.argv.slice(2)
+  const root = args[0]
+  if (!root) throw new Error("usage: import-materials.ts <checkouts-dir> [--dry-run] [--only <dir>]")
+  const dryRun = args.includes("--dry-run")
+  const onlyAt = args.indexOf("--only")
+  const { planned, unmatched, skipped } = plan(root, onlyAt >= 0 ? args[onlyAt + 1] : undefined)
 
   const byCategory = new Map<string, number>()
   for (const p of planned) byCategory.set(p.category, (byCategory.get(p.category) ?? 0) + 1)
@@ -111,7 +114,7 @@ async function main() {
   console.log("skipped:", skipped)
   if (unmatched.size) console.log("unmatched subject folders:", Object.fromEntries(unmatched))
 
-  if (flag === "--dry-run") {
+  if (dryRun) {
     for (const p of planned.filter((_, i) => i % 40 === 0))
       console.log(`  ${p.source.dir}:${p.path}\n    → ${p.subjectSlug} / ${p.category} / ${p.folder || "·"} / ${p.name}`)
     return
