@@ -228,6 +228,23 @@ MASTER_EN = {
     'MD': 'Mathematics Education', 'PSFS': 'Probability and Statistics in Finance and Science',
     'SD': 'Distributed Systems', 'ASM': 'Advanced Studies in Mathematics',
 }
+def clean_event(e):
+    """Event dict for the app; pulls series markers ("seria_4") out of the subject."""
+    subject, series = e['subject'], None
+    m = re.search(r'\s*seria_?(\d+)', subject)
+    if m:
+        series = m.group(1)
+        subject = (subject[:m.start()] + subject[m.end():]).strip()
+    ev = {'day': e['day'], 'start': e['start'], 'end': e['end'], 'subject': subject,
+          'teacher': e['teacher'], 'room': e['room']}
+    kind = e['kind'] or ('curs' if series else 'lab' if e['group'] and len(e['group']) > 1 else None)
+    for key, val in [('kind', kind), ('semi', e['group']), ('series', series),
+                     ('parity', e['parity']), ('weeks', e['weeks'])]:
+        if val:
+            ev[key] = val
+    return ev
+
+
 groups = []
 for pg in result:
     t = pg['title']
@@ -241,17 +258,39 @@ for pg in result:
         year = 1 if g[0] == '4' else 2
         key, label = 'm-' + m2.group(3).lower(), f'{MASTER_EN.get(m2.group(3), m2.group(4))} ({m2.group(3)})'
     else:
-        continue  # optional / facultative / guest pages
-    evs = []
-    for e in pg['events']:
-        ev = {k: e[k] for k in ['day', 'start', 'end', 'subject', 'teacher', 'room']}
-        for src, dst in [('kind', 'kind'), ('group', 'semi'), ('parity', 'parity'), ('weeks', 'weeks')]:
-            if e[src]:
-                ev[dst] = e[src]
-        evs.append(ev)
-    groups.append({'id': g, 'level': level, 'year': year, 'spec': key, 'specLabel': label, 'events': evs})
+        continue  # electives are handled below
+    groups.append({'id': g, 'level': level, 'year': year, 'spec': key, 'specLabel': label,
+                   'events': [clean_event(e) for e in pg['events']]})
+
+# Optional ("Optionale") and facultative pages: one timetable shared by a year/specialization,
+# from which each student picks their own subjects.
+ROMAN_YEAR = {'I': 1, 'II': 2, 'III': 3, 'IV': 4}
+ELECTIVE_SPECS = {
+    'mate': ['mate'], 'info': ['info', 'info-en'], 'cti': ['cti'], 'mate-info': ['mate-info'],
+    'mate apl.': ['mate-apl'], 'mate aplicate': ['mate-apl'],
+}
+MASTER_INFO = ['m-bdts', 'm-is', 'm-ai', 'm-sd', 'm-sal', 'm-ds', 'm-nlp']
+electives = []
+for pg in result:
+    t = pg['title']
+    m = re.match(r'^(Optionale|Facultative) an (IV|III|II|I)\b\s*(.*)$', t)
+    if not m or not pg['events']:
+        continue
+    kind = 'optional' if m.group(1) == 'Optionale' else 'facultative'
+    year, rest = ROMAN_YEAR[m.group(2)], m.group(3).strip()
+    level = 'licenta'
+    if rest.startswith('Master'):
+        level, specs = 'master', MASTER_INFO
+    elif rest.startswith('('):  # "(Mate, Info, CTI)"
+        specs = sorted({s for part in rest.strip('()').split(',') for s in ELECTIVE_SPECS[part.strip().lower()]})
+    else:  # "- INFO", "- MATE-INFO (Informatica)", "- INFO (Lab)"
+        name = re.sub(r'\s*\(.*\)$', '', rest.lstrip('- ')).lower()
+        specs = ELECTIVE_SPECS[name]
+    electives.append({'title': t, 'kind': kind, 'level': level, 'year': year, 'specs': specs,
+                      'events': [clean_event(e) for e in pg['events']]})
+
 json.dump({'source': 'https://drive.google.com/file/d/1p3TfdskI1gIGjakvMhrhskoH3uAjk4SB/view',
-           'generated': '2026-10-04', 'groups': groups},
+           'generated': '2026-10-04', 'groups': groups, 'electives': electives},
           open('lib/orar/orar.json', 'w'), ensure_ascii=False, separators=(',', ':'))
 for pr in problems:
     print(pr)

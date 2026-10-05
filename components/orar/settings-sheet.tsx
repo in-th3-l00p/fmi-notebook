@@ -31,14 +31,14 @@ export function SettingsSheet({
           Change group
         </Button>
       </SheetTrigger>
-      <SheetContent>
+      <SheetContent className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="text-lg">Your group</SheetTitle>
           <SheetDescription>
             Stays saved in this browser.
           </SheetDescription>
         </SheetHeader>
-        <div className="px-4">
+        <div className="px-4 pb-6">
           <SettingsForm groups={groups} initial={initial} onSaved={() => setOpen(false)} />
         </div>
       </SheetContent>

@@ -2,6 +2,8 @@ import "server-only"
 
 import { cookies } from "next/headers"
 
+import type { ElectivePick } from "./data"
+
 export const SETTINGS_COOKIE = "fmi-orar"
 
 export type OrarSettings = {
@@ -11,6 +13,8 @@ export type OrarSettings = {
   group: string
   /** "" means the whole group (both semigroups). */
   semi: string
+  /** Optional / facultative courses the student takes. */
+  electives: ElectivePick[]
 }
 
 export async function readSettings(): Promise<OrarSettings | null> {
@@ -24,6 +28,7 @@ export async function readSettings(): Promise<OrarSettings | null> {
       spec: parsed.spec ?? "",
       group: parsed.group,
       semi: parsed.semi ?? "",
+      electives: Array.isArray(parsed.electives) ? parsed.electives : [],
     }
   } catch {
     return null

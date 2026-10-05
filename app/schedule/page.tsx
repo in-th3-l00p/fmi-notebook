@@ -5,7 +5,7 @@ import { SettingsForm } from "@/components/orar/settings-form"
 import { SettingsSheet } from "@/components/orar/settings-sheet"
 import { WeekCalendar } from "@/components/orar/week-calendar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { SCHEDULE_GENERATED, SCHEDULE_SOURCE, getGroup, getGroupIndex } from "@/lib/orar/data"
+import { SCHEDULE_GENERATED, SCHEDULE_SOURCE, electiveEventsFor, getGroup, getGroupIndex } from "@/lib/orar/data"
 import { todayInBucharest } from "@/lib/orar/semester"
 import { readSettings } from "@/lib/orar/settings"
 
@@ -52,9 +52,10 @@ export default async function SchedulePage() {
     )
   }
 
-  const events = settings.semi
-    ? group.events.filter((e) => !e.semi || e.semi === settings.semi)
-    : group.events
+  const events = [
+    ...(settings.semi ? group.events.filter((e) => !e.semi || e.semi === settings.semi) : group.events),
+    ...electiveEventsFor(group, settings.electives),
+  ]
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 pt-10">
@@ -65,6 +66,9 @@ export default async function SchedulePage() {
             {group.level === "master" ? "Master's, year" : "Year"} {ROMAN[group.year]} · {group.specLabel} · Group{" "}
             {group.id}
             {settings.semi && <> · Subgroup {settings.semi}</>}
+            {settings.electives.length > 0 && (
+              <> · {settings.electives.length} optional {settings.electives.length === 1 ? "course" : "courses"}</>
+            )}
           </p>
         </div>
         <SettingsSheet groups={groups} initial={settings} />

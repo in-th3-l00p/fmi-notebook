@@ -15,12 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { GroupMeta } from "@/lib/orar/data"
+import { Checkbox } from "@/components/ui/checkbox"
+import type { ElectivePick, GroupMeta } from "@/lib/orar/data"
 
-type Initial = { year: string; spec: string; group: string; semi: string }
+type Initial = { year: string; spec: string; group: string; semi: string; electives: ElectivePick[] }
 
 const ROMAN = ["", "I", "II", "III", "IV"]
 const WHOLE_GROUP = "all"
+const ALL_LABS = "all"
 
 function yearKey(g: GroupMeta) {
   return `${g.level}-${g.year}`
@@ -44,6 +46,8 @@ export function SettingsForm({
   const [spec, setSpec] = useState(initial?.spec ?? "")
   const [group, setGroup] = useState(initial?.group ?? "")
   const [semi, setSemi] = useState(initial?.semi || WHOLE_GROUP)
+  // subject -> chosen lab group ("" = not chosen / no labs)
+  const [picks, setPicks] = useState(() => new Map((initial?.electives ?? []).map((p) => [p.subject, p.lab])))
   const [pending, startTransition] = useTransition()
 
   const years = useMemo(() => [...new Set(groups.map(yearKey))], [groups])
@@ -54,6 +58,20 @@ export function SettingsForm({
   }, [groups, year])
   const groupOptions = groups.filter((g) => yearKey(g) === year && g.spec === spec)
   const semis = groups.find((g) => g.id === group)?.semis ?? []
+  const electives = groups.find((g) => g.id === group)?.electives ?? []
+
+  function togglePick(subject: string, on: boolean) {
+    setPicks((prev) => {
+      const next = new Map(prev)
+      if (on) next.set(subject, "")
+      else next.delete(subject)
+      return next
+    })
+  }
+
+  function setLab(subject: string, lab: string) {
+    setPicks((prev) => new Map(prev).set(subject, lab === ALL_LABS ? "" : lab))
+  }
 
   function pickYear(value: string) {
     setYear(value)
@@ -71,7 +89,13 @@ export function SettingsForm({
 
   function submit() {
     startTransition(async () => {
-      const res = await saveSettings({ year, spec, group, semi: semi === WHOLE_GROUP ? "" : semi })
+      const res = await saveSettings({
+        year,
+        spec,
+        group,
+        semi: semi === WHOLE_GROUP ? "" : semi,
+        electives: electives.filter((o) => picks.has(o.subject)).map((o) => ({ subject: o.subject, lab: picks.get(o.subject)! })),
+      })
       if (res.ok) {
         toast.success(`Saved. Group ${group} will open by default.`)
         onSaved?.()
@@ -159,6 +183,43 @@ export function SettingsForm({
           </Select>
         </Field>
       </div>
+
+      {electives.length > 0 && (
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-sm font-medium">Optional courses</legend>
+          <p className="-mt-1 mb-1 text-sm text-muted-foreground">Tick the ones you take. They show up in your timetable.</p>
+          <div className="grid gap-1 rounded-lg border p-2">
+            {electives.map((o) => {
+              const id = `opt-${o.subject}`
+              const checked = picks.has(o.subject)
+              return (
+                <div key={o.subject} className="flex min-h-9 items-center gap-3 rounded-md px-2 py-1 hover:bg-muted/60">
+                  <Checkbox id={id} checked={checked} onCheckedChange={(v) => togglePick(o.subject, v === true)} />
+                  <Label htmlFor={id} className="flex-1 cursor-pointer font-normal">
+                    {o.subject}
+                    {o.kind === "facultative" && <span className="ml-1.5 text-xs text-muted-foreground">facultative</span>}
+                  </Label>
+                  {checked && o.labGroups.length > 0 && (
+                    <Select value={picks.get(o.subject) || ALL_LABS} onValueChange={(v) => setLab(o.subject, v)}>
+                      <SelectTrigger size="sm" className="w-32" aria-label={`Lab group for ${o.subject}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_LABS}>All labs</SelectItem>
+                        {o.labGroups.map((g) => (
+                          <SelectItem key={g} value={g}>
+                            Lab group {g}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </fieldset>
+      )}
 
       <Button type="submit" size="lg" disabled={!group || pending} className="mt-2 h-10">
         {pending ? "Saving…" : "Save"}

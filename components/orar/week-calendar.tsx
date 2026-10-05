@@ -314,7 +314,13 @@ export function WeekCalendar({ events, today }: { events: ClassEvent[]; today: s
 type Tint = (typeof TINTS)[number]
 
 function meta(e: ClassEvent) {
-  return [e.kind && KIND_LABEL[e.kind], e.semi && `Subgroup ${e.semi}`].filter(Boolean).join(" · ")
+  return [
+    e.elective && (e.elective === "optional" ? "Optional" : "Facultative"),
+    e.kind && KIND_LABEL[e.kind],
+    e.semi && (e.elective ? `Lab group ${e.semi}` : `Subgroup ${e.semi}`),
+  ]
+    .filter(Boolean)
+    .join(" · ")
 }
 
 function EventBlock({ event: e, tint }: { event: Placed; tint: Tint }) {
